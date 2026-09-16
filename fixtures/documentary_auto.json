@@ -1,0 +1,14 @@
+{
+  "job_id": "fixture-documentary-auto",
+  "pipeline": "documentary-montage",
+  "review_mode": false,
+  "canned": true,
+  "prefs": {
+    "topic": "Voyager at Jupiter",
+    "duration_seconds": 10,
+    "platform_profile": "16:9",
+    "real_footage_only": true,
+    "delivery_promise": "mixed",
+    "language": "en"
+  }
+}

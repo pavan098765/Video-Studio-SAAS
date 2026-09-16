@@ -1,0 +1,7 @@
+{
+  "job_id": "fixture-screen-demo-auto",
+  "pipeline": "screen-demo",
+  "review_mode": false,
+  "canned": true,
+  "prefs": {"topic": "App walkthrough", "duration_seconds": 10, "delivery_promise": "mixed"}
+}

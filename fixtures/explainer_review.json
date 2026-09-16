@@ -1,0 +1,13 @@
+{
+  "job_id": "fixture-explainer-review",
+  "pipeline": "animated-explainer",
+  "review_mode": true,
+  "canned": true,
+  "prefs": {
+    "topic": "How photosynthesis works",
+    "duration_seconds": 10,
+    "platform_profile": "16:9",
+    "delivery_promise": "mixed",
+    "language": "en"
+  }
+}

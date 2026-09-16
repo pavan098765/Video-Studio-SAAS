@@ -1,0 +1,7 @@
+{
+  "job_id": "fixture-animation-auto",
+  "pipeline": "animation",
+  "review_mode": false,
+  "canned": true,
+  "prefs": {"topic": "Bouncing ball", "duration_seconds": 10, "delivery_promise": "mixed"}
+}

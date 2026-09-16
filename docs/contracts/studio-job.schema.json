@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kala-studio-engine/studio-job",
+  "title": "Studio job payload (sanitized VM JSON)",
+  "type": "object",
+  "required": ["job_id", "pipeline", "prefs", "review_mode"],
+  "additionalProperties": false,
+  "properties": {
+    "job_id": { "type": "string", "minLength": 1 },
+    "user_id": { "type": "string" },
+    "pipeline": {
+      "type": "string",
+      "enum": [
+        "animated-explainer",
+        "animation",
+        "avatar-spokesperson",
+        "character-animation",
+        "cinematic",
+        "clip-factory",
+        "documentary-montage",
+        "hybrid",
+        "localization-dub",
+        "podcast-repurpose",
+        "screen-demo",
+        "talking-head",
+        "auto"
+      ]
+    },
+    "review_mode": { "type": "boolean" },
+    "canned": { "type": "boolean" },
+    "asset_keys": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "assetKeys": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "reference_url": { "type": "string" },
+    "prefs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "topic": { "type": "string" },
+        "audience": { "type": "string" },
+        "duration_seconds": { "type": "integer", "minimum": 5, "maximum": 1200 },
+        "language": { "type": "string" },
+        "platform_profile": {
+          "type": "string",
+          "enum": ["16:9", "9:16", "1:1", "21:9"]
+        },
+        "style_playbook": { "type": "string" },
+        "voice_id": { "type": "string" },
+        "captions": { "type": "boolean" },
+        "music": { "type": "boolean" },
+        "real_footage_only": { "type": "boolean" },
+        "budget_cap_usd": { "type": "number", "minimum": 0 },
+        "delivery_promise": {
+          "type": "string",
+          "enum": ["motion_led", "mixed"]
+        },
+        "render_runtime": {
+          "type": "string",
+          "enum": ["remotion", "hyperframes", "ffmpeg", "motion_canvas"]
+        },
+        "talking": { "type": "boolean" },
+        "long_video": { "type": "boolean" },
+        "composition_mode": {
+          "type": "string",
+          "enum": ["templated", "atelier"]
+        },
+        "regen_prompt": { "type": "string" },
+        "reference_url": { "type": "string" }
+      }
+    },
+    "asset_urls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["r2_key"],
+        "additionalProperties": false,
+        "properties": {
+          "r2_key": { "type": "string" },
+          "get_url": { "type": "string" },
+          "kind": { "type": "string" }
+        }
+      }
+    },
+    "r2": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prefix": { "type": "string" },
+        "put_base": { "type": "string" },
+        "get": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "get_urls": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "resume": { "type": "boolean" },
+    "continue_after_review": { "type": "boolean" },
+    "regenerate_scene_id": { "type": "string" },
+    "compose_strategy": {
+      "type": "string",
+      "enum": ["single_runtime", "scene_assemble"]
+    },
+    "scene_runtimes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  }
+}

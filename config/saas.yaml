@@ -1,0 +1,89 @@
+# kala-studio-engine — Vultr CPU snapshot. No local GPU, no Blender binary.
+VIDEO_GEN_LOCAL_ENABLED: false
+
+llm:
+  provider: gemini
+  model: gemini-3.5-flash-lite
+  atelier_model: gemini-3.5-flash
+  visual_qa_model: gemini-3.5-flash-lite
+  planner:
+    provider: gemini
+    model: gemini-3.5-flash-lite
+    # HTTP 502/503/504 / 404 only. Daily RPD still fails closed (does not spend atelier Flash).
+    fallback_models:
+      - gemini-3.5-flash-lite
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-3.5-flash
+  visual_qa:
+    provider: gemini
+    model: gemini-3.5-flash-lite
+    fallback_models:
+      - gemini-3.5-flash-lite
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-3.5-flash
+  atelier:
+    provider: gemini
+    model: gemini-3.5-flash
+    # Tool-calling Flash pool only. Lite invents JSON instead of calling tools.
+    # Each Flash ID is 20 RPD; exhaustion fails closed rather than degrading to Lite.
+    fallback_models:
+      - gemini-3.5-flash
+      - gemini-3.6-flash
+      - gemini-3.7-flash
+      - gemini-3.8-flash
+      - gemini-3-flash-preview
+    # provider: anthropic
+    # model: claude-sonnet-4-5
+    # base_url: https://api.z.ai/api/paas/v4
+    # api_key_env: GLM_API_KEY
+  # Free-tier pacing (Pacific midnight RPD). STUDIO_GEMINI_RATE_LIMIT=0 disables.
+  gemini_rate_limit:
+    enabled: true
+    models:
+      gemini-3.5-flash-lite: {rpm: 15, tpm: 250000, rpd: 500}
+      gemini-2.5-flash-lite: {rpm: 15, tpm: 250000, rpd: 500}
+      gemini-2.0-flash: {rpm: 15, tpm: 250000, rpd: 200}
+      gemini-3.8-flash: {rpm: 5, tpm: 250000, rpd: 20}
+      gemini-3.7-flash: {rpm: 5, tpm: 250000, rpd: 20}
+      gemini-3.6-flash: {rpm: 5, tpm: 250000, rpd: 20}
+      gemini-3.5-flash: {rpm: 5, tpm: 250000, rpd: 20}
+      gemini-3-flash-preview: {rpm: 5, tpm: 250000, rpd: 20}
+      gemini-3-flash: {rpm: 5, tpm: 250000, rpd: 20}
+      gemini-2.5-flash: {rpm: 5, tpm: 250000, rpd: 20}
+    default: {rpm: 5, tpm: 250000, rpd: 20}
+
+tts:
+  provider: piper
+  voice: en_US-lessac-medium
+
+blender:
+  enabled: false
+
+local_gpu_tools:
+  enabled: false
+
+tools:
+  blender_world:
+    enabled: false
+  wan_video:
+    enabled: false
+  hunyuan_video:
+    enabled: false
+  cogvideo_video:
+    enabled: false
+  ltx_video_local:
+    enabled: false
+  local_diffusion:
+    enabled: false
+
+output:
+  default_resolution: "1920x1080"
+  default_fps: 30
+  default_codec: libx264
+  default_audio_codec: aac
+
+capacity:
+  chrome_heavy_slots: 1
+  max_instances: 2

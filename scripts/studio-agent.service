@@ -1,0 +1,19 @@
+[Unit]
+Description=Kala Studio engine agent (pull jobs from genedit)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/kala-studio-engine
+Environment=VIDEO_GEN_LOCAL_ENABLED=false
+Environment=SAAS_DISABLE_BLENDER=1
+Environment=TTS_PROVIDER=piper
+Environment=PYTHONPATH=/opt/kala-studio-engine
+Environment=SMOKE=0
+ExecStart=/bin/bash -lc 'if [ "$SMOKE" = "1" ]; then /opt/kala-studio-engine/smokes/run_all.sh; else /opt/kala-studio-engine/.venv/bin/python -m runner.agent; fi'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

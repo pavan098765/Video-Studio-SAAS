@@ -1,0 +1,7 @@
+{
+  "job_id": "fixture-cinematic-novideo",
+  "pipeline": "cinematic",
+  "review_mode": false,
+  "canned": true,
+  "prefs": {"topic": "Noir alley", "duration_seconds": 10, "delivery_promise": "motion_led"}
+}

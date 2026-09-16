@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kala-studio-engine/artifacts/storyboard",
+  "title": "Storyboard",
+  "description": "Per-scene filmstrip payload for Kala review. Engine writes this after compose; genedit may add R2 keys later.",
+  "type": "object",
+  "required": ["job_id", "status", "scenes"],
+  "additionalProperties": true,
+  "properties": {
+    "job_id": { "type": ["string", "null"] },
+    "status": { "type": "string" },
+    "compose_strategy": { "type": "string" },
+    "composition_mode": { "type": "string", "enum": ["templated", "atelier"] },
+    "atelier_slug": { "type": ["string", "null"] },
+    "composition_id": { "type": ["string", "null"] },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "script_line": { "type": ["string", "null"] },
+          "duration": { "type": "number" },
+          "approved": { "type": "boolean" },
+          "poster": { "type": ["string", "null"] },
+          "preview": { "type": ["string", "null"] },
+          "poster_key": { "type": ["string", "null"] },
+          "preview_key": { "type": ["string", "null"] },
+          "render_runtime": { "type": ["string", "null"] },
+          "generator": { "type": ["string", "null"] },
+          "composition_mode": { "type": ["string", "null"] },
+          "qa_status": { "type": "string", "enum": ["pass", "warn", "fail", "skipped"] },
+          "qa_issues": { "type": "array", "items": { "type": "string" } },
+          "atelier_slug": { "type": ["string", "null"] },
+          "composition_id": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

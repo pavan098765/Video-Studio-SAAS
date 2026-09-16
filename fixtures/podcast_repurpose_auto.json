@@ -1,0 +1,8 @@
+{
+  "job_id": "fixture-podcast-auto",
+  "pipeline": "podcast-repurpose",
+  "review_mode": false,
+  "canned": true,
+  "asset_keys": ["studio/u/fixture/podcast.mp3"],
+  "prefs": {"topic": "Podcast clips", "duration_seconds": 10, "delivery_promise": "mixed"}
+}

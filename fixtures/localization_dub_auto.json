@@ -1,0 +1,8 @@
+{
+  "job_id": "fixture-dub-auto",
+  "pipeline": "localization-dub",
+  "review_mode": false,
+  "canned": true,
+  "asset_keys": ["studio/u/fixture/talk.mp4"],
+  "prefs": {"topic": "Dub to Spanish", "language": "es", "duration_seconds": 10, "delivery_promise": "mixed"}
+}

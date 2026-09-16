@@ -1,0 +1,13 @@
+{
+  "name": "studio-mc-smoke",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "render": "motion-canvas-render src/project.ts --output /tmp/smoke-motion-canvas.mp4 || node ./render.mjs"
+  },
+  "dependencies": {
+    "@motion-canvas/2d": "^3.17.2",
+    "@motion-canvas/core": "^3.17.2",
+    "@motion-canvas/ffmpeg": "^3.17.2"
+  }
+}

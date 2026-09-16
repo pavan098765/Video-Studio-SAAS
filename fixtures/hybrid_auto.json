@@ -1,0 +1,8 @@
+{
+  "job_id": "fixture-hybrid-auto",
+  "pipeline": "hybrid",
+  "review_mode": false,
+  "canned": true,
+  "asset_keys": ["studio/u/fixture/clip.mp4"],
+  "prefs": {"topic": "Hybrid explainer", "duration_seconds": 10, "delivery_promise": "mixed"}
+}

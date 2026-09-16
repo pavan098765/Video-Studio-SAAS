@@ -1,0 +1,8 @@
+{
+  "job_id": "fixture-talking-head-auto",
+  "pipeline": "talking-head",
+  "review_mode": false,
+  "canned": true,
+  "asset_keys": ["studio/u/fixture/talk.mp4"],
+  "prefs": {"topic": "Host to camera", "talking": true, "duration_seconds": 10, "delivery_promise": "mixed"}
+}

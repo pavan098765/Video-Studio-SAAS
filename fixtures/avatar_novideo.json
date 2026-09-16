@@ -1,0 +1,7 @@
+{
+  "job_id": "fixture-avatar-novideo",
+  "pipeline": "avatar-spokesperson",
+  "review_mode": false,
+  "canned": true,
+  "prefs": {"topic": "CEO intro", "duration_seconds": 10, "delivery_promise": "mixed"}
+}

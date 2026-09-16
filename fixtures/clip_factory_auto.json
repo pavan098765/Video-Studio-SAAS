@@ -1,0 +1,8 @@
+{
+  "job_id": "fixture-clip-factory-auto",
+  "pipeline": "clip-factory",
+  "review_mode": false,
+  "canned": true,
+  "asset_keys": ["studio/u/fixture/long.mp4"],
+  "prefs": {"topic": "Highlights", "duration_seconds": 10, "long_video": true, "delivery_promise": "mixed"}
+}

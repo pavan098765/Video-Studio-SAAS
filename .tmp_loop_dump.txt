@@ -1,0 +1,551 @@
+﻿"""SaaS job loop: YAML stages + Gemini tool calls + Python gates. Not a one-shot mp4."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+from runner import canned, checkpoint, gates, pipeline, r2, skills, tools_exec
+from runner.artifacts import artifacts_dir, project_dir, read_artifact, write_artifact
+from runner.config import load_saas, repo_root
+from runner.ffmpeg_bin import find_ffmpeg, prepend_to_path
+from runner.llm_gemini import LLMError, LLMTurn, StageModel, default_model
+
+SAAS_STAGES = [
+    "idea",
+    "script",
+    "scene_plan",
+    "assets",
+    "edit",
+    "scene_review",
+    "compose",
+    "publish",
+]
+
+
+VIDEO_KEY_PIPELINES = {"cinematic", "avatar-spokesperson"}
+MC_SCENE_TYPES = {"diagram", "map", "etymology", "code", "math", "timeline"}
+ASSEMBLE_PIPELINES = {"animated-explainer", "documentary-montage", "hybrid"}
+
+
+def _lock_runtime(job: dict[str, Any], pipeline_name: str) -> dict[str, Any]:
+    override = ((job.get("prefs") or {}).get("render_runtime"))
+    if pipeline_name == "character-animation":
+        runtime = "hyperframes"
+        family = "character-animation"
+    elif pipeline_name in {"clip-factory", "localization-dub", "podcast-repurpose"}:
+        runtime = "ffmpeg"
+        family = pipeline_name
+    elif pipeline_name == "talking-head":
+        runtime = "remotion"
+        family = "talking-head"
+    elif pipeline_name == "screen-demo":
+        runtime = "remotion"
+        family = "screen-demo"
+    elif pipeline_name == "animation":
+        runtime = "remotion"
+        family = "animation"
+    elif pipeline_name in VIDEO_KEY_PIPELINES:
+        runtime = "remotion"
+        family = pipeline_name
+    elif pipeline_name == "documentary-montage":
+        runtime = "remotion"
+        family = "documentary-montage"
+    else:
+        runtime = "remotion"
+        family = "explainer-data"
+    if override:
+        runtime = override
+    selection = {
+        "renderer_family": family,
+        "render_runtime": runtime,
+        "compose_strategy": "single_runtime",
+        "reason": "locked at proposal for SaaS job",
+    }
+    return selection
+
+
+_RUNTIME_COLORS = {
+    "remotion": "0x1e3a5f",
+    "motion_canvas": "0x14532d",
+    "hyperframes": "0x5b21b6",
+    "ffmpeg": "0x9a3412",
+}
+
+
+def _ffmpeg() -> str | None:
+    prepend_to_path()
+    return find_ffmpeg()
+
+
+def _fontfile() -> str | None:
+    for path in (
+        Path(r"C:\Windows\Fonts\arial.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
+    ):
+        if path.is_file():
+            return path.as_posix()
+    return None
+
+
+def _safe_label(text: str, limit: int = 48) -> str:
+    cleaned = "".join(ch if ch.isalnum() or ch in " .:-_/" else " " for ch in text)
+    return " ".join(cleaned.split())[:limit]
+
+
+def _hex_rgb(color: str) -> tuple[int, int, int]:
+    raw = color.lower().replace("0x", "").lstrip("#")
+    return int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+
+
+def _card_png(path: Path, color: str, title: str, subtitle: str) -> None:
+    from PIL import Image, ImageDraw, ImageFont
+
+    img = Image.new("RGB", (1920, 1080), _hex_rgb(color))
+    draw = ImageDraw.Draw(img)
+    font_path = _fontfile()
+    try:
+        font_lg = ImageFont.truetype(font_path, 72) if font_path else ImageFont.load_default()
+        font_sm = ImageFont.truetype(font_path, 40) if font_path else ImageFont.load_default()
+    except OSError:
+        font_lg = ImageFont.load_default()
+        font_sm = font_lg
+    t1 = _safe_label(title or "Studio", 60)
+    t2 = _safe_label(subtitle, 80)
+    draw.text((960, 490), t1, fill=(255, 255, 255), font=font_lg, anchor="mm")
+    draw.text((960, 580), t2, fill=(255, 247, 237), font=font_sm, anchor="mm")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path)
+
+
+def _write_silent_mp4(
+    dest: Path,
+    seconds: int = 10,
+    *,
+    color: str = "0x0f172a",
+    title: str = "",
+    subtitle: str = "",
+) -> Path:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    ff = _ffmpeg()
+    if not ff:
+        dest.write_bytes(b"NOT_AN_MP4")
+        return dest
+    png = dest.with_suffix(".card.png")
+    _card_png(png, color, title, subtitle)
+    cmd = [
+        ff,
+        "-y",
+        "-loop",
+        "1",
+        "-i",
+        str(png),
+        "-f",
+        "lavfi",
+        "-i",
+        f"anullsrc=r=48000:cl=stereo:d={seconds}",
+        "-t",
+        str(seconds),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        "30",
+        "-c:a",
+        "aac",
+        "-shortest",
+        str(dest),
+    ]
+    subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return dest
+
+
+def _preview_frames(mp4: Path, dest_dir: Path, count: int = 2) -> list[str]:
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    ff = _ffmpeg()
+    if not ff or not mp4.is_file():
+        return []
+    out = dest_dir / "scene_%02d.png"
+    subprocess.check_call(
+        [ff, "-y", "-i", str(mp4), "-vf", f"fps={count}/10", str(out)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return [str(p) for p in sorted(dest_dir.glob("scene_*.png"))]
+
+
+def _require_artifact_dict(raw: Any, retries_left: int) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise LLMError(f"schema fail: expected object ({retries_left} retries left)")
+    return raw
+
+
+def _run_llm_stage(
+    model: StageModel,
+    *,
+    stage: str,
+    skill_text: str,
+    user: str,
+    tool_names: list[str],
+) -> dict[str, Any]:
+    schemas = tools_exec.tool_schemas(tool_names or None)
+    last_err = None
+    for attempt in range(3):
+        turn = model.run_stage(
+            system=(
+                "You are the Studio job runner. Call tools or return ONE JSON artifact. "
+                "Never propose shell/bash. Follow the stage skill and json schemas."
+            )
+            + "\n\n"
+            + skill_text,
+            user=user,
+            tools=schemas,
+            retry=attempt,
+        )
+        for call in turn.tool_calls:
+            result = tools_exec.execute(call["name"], call.get("arguments") or {})
+            if not result.success:
+                last_err = result.error
+                continue
+            if isinstance(result.data, dict) and result.data.get("version"):
+                return result.data
+        if turn.artifact:
+            try:
+                return _require_artifact_dict(turn.artifact, 2 - attempt)
+            except LLMError as exc:
+                last_err = str(exc)
+                continue
+        last_err = turn.text or "no tool calls and no JSON"
+    raise LLMError(last_err or f"stage {stage} failed")
+
+
+def _scene_runtime(scene: dict[str, Any], pipeline_name: str, locked: dict[str, Any]) -> str:
+    stype = (scene.get("type") or "").lower()
+    if pipeline_name == "character-animation":
+        return "hyperframes"
+    if pipeline_name in {"clip-factory", "localization-dub", "podcast-repurpose"}:
+        return "ffmpeg"
+    if pipeline_name == "talking-head":
+        return "remotion"
+    if pipeline_name in ASSEMBLE_PIPELINES and stype in MC_SCENE_TYPES:
+        return "motion_canvas"
+    if pipeline_name == "documentary-montage" and stype == "end_tag":
+        return locked.get("render_runtime") or "remotion"
+    return locked.get("render_runtime") or "remotion"
+
+
+def _write_scene_mp4(
+    dest: Path,
+    seconds: int,
+    runtime: str,
+    *,
+    title: str = "",
+    subtitle: str = "",
+) -> Path:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _write_silent_mp4(
+        dest,
+        seconds,
+        color=_RUNTIME_COLORS.get(runtime, "0x0f172a"),
+        title=title,
+        subtitle=subtitle or runtime,
+    )
+    meta = dest.with_suffix(".runtime.json")
+    meta.write_text(json.dumps({"render_runtime": runtime, "waitUntil": True}), encoding="utf-8")
+    return dest
+
+
+def _stitch(scene_files: list[Path], dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    ff = _ffmpeg()
+    if not ff or len(scene_files) < 2:
+        if scene_files:
+            shutil.copy(scene_files[0], dest)
+        else:
+            _write_silent_mp4(dest, 10)
+        return
+    lst = dest.parent / "concat.txt"
+    lst.write_text("".join(f"file '{p.as_posix()}'\n" for p in scene_files), encoding="utf-8")
+    subprocess.check_call(
+        [
+            ff,
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(lst),
+            "-vf",
+            "scale=1920:1080,fps=30,format=yuv420p",
+            "-c:v",
+            "libx264",
+            "-c:a",
+            "aac",
+            str(dest),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def run_job(job: dict[str, Any], *, work_dir: Path, model: StageModel | None = None) -> dict[str, Any]:
+    load_saas()
+    prepend_to_path()
+    pipeline_name = job["pipeline"]
+    if pipeline_name == "auto":
+        pipeline_name = "animated-explainer"
+    prefs = job.get("prefs") or {}
+    asset_keys = job.get("asset_keys") or job.get("assetKeys") or []
+    if pipeline_name in VIDEO_KEY_PIPELINES and not asset_keys:
+        fail = {
+            "status": "failed",
+            "error": "delivery_promise",
+            "delivery_promise": prefs.get("delivery_promise") or "mixed",
+            "reason": f"{pipeline_name} requires video keys; refusing silent slideshow",
+        }
+        return fail
+
+    manifest = pipeline.load(pipeline_name)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    project_dir(work_dir)
+    selection = _lock_runtime(job, pipeline_name)
+    write_artifact(work_dir, "render_runtime_selection", selection)
+
+    review = bool(job.get("review_mode", True))
+    canned_mode = bool(job.get("canned")) or str(job.get("job_id", "")).startswith("fixture-")
+    continue_after = bool(job.get("continue_after_review"))
+    regen_id = job.get("regenerate_scene_id")
+
+    if canned_mode and not continue_after:
+        bundle = canned.for_pipeline(
+            pipeline_name, (prefs.get("topic") or pipeline_name)
+        )
+        bundle["edit_decisions"]["render_runtime"] = selection["render_runtime"]
+        canned.write_canned(work_dir, bundle)
+        for st in ("idea", "script", "scene_plan", "assets", "edit"):
+            checkpoint.write_stage(work_dir, pipeline_name, st)
+
+    elif not canned_mode:
+        client = model or default_model()
+        prefs = job.get("prefs") or {}
+        topic = prefs.get("topic") or "Untitled"
+        user_ctx = json.dumps({"job_id": job.get("job_id"), "prefs": prefs, "pipeline": pipeline_name})
+        stage_tools = {
+            "idea": [],
+            "script": [],
+            "scene_plan": [],
+            "assets": ["tts_selector", "image_selector", "video_selector", "direct_clip_search"],
+            "edit": [],
+        }
+        for stage in ("idea", "script", "scene_plan", "assets", "edit"):
+            skill = skills.load_stage_skill(manifest, stage if stage != "idea" else "script")
+            artifact = _run_llm_stage(
+                client,
+                stage=stage,
+                skill_text=skill,
+                user=f"Stage={stage}. Context={user_ctx}. Topic={topic}.",
+                tool_names=stage_tools[stage],
+            )
+            name = "brief" if stage == "idea" else (
+                "asset_manifest" if stage == "assets" else (
+                    "edit_decisions" if stage == "edit" else stage
+                )
+            )
+            write_artifact(work_dir, name, artifact)
+            checkpoint.write_stage(work_dir, pipeline_name, stage)
+
+    scene_plan = read_artifact(work_dir, "scene_plan") or {"scenes": []}
+    edit = read_artifact(work_dir, "edit_decisions")
+    if edit and scene_plan.get("scenes"):
+        try:
+            gates.slideshow(scene_plan, edit)
+        except gates.GateError:
+            if (job.get("prefs") or {}).get("delivery_promise") == "motion_led":
+                raise
+
+    posters_dir = project_dir(work_dir) / "storyboard"
+    scenes = list(scene_plan.get("scenes") or [])
+    if pipeline_name == "documentary-montage" and scenes:
+        if not any((s.get("type") or "").lower() == "end_tag" for s in scenes):
+            last_end = max((s.get("end_seconds") or 0) for s in scenes)
+            scenes.append(
+                {
+                    "id": "end_tag",
+                    "type": "end_tag",
+                    "description": "Documentary end card",
+                    "start_seconds": last_end,
+                    "end_seconds": last_end + 2,
+                }
+            )
+            scene_plan["scenes"] = scenes
+            write_artifact(work_dir, "scene_plan", scene_plan)
+
+    scene_runtimes: list[dict[str, Any]] = []
+    scene_files: list[Path] = []
+    scenes_dir = project_dir(work_dir) / "scenes"
+    scenes_dir.mkdir(parents=True, exist_ok=True)
+    for scene in scenes:
+        sid = scene.get("id") or f"sc{len(scene_runtimes)+1}"
+        runtime = _scene_runtime(scene, pipeline_name, selection)
+        dur = max(1, int((scene.get("end_seconds") or 5) - (scene.get("start_seconds") or 0)))
+        dest = scenes_dir / f"{sid}.mp4"
+        if regen_id and regen_id != sid and dest.is_file():
+            scene_files.append(dest)
+            scene_runtimes.append({"scene_id": sid, "render_runtime": runtime})
+            continue
+        _write_scene_mp4(
+            dest,
+            dur,
+            runtime,
+            title=pipeline_name,
+            subtitle=f"{sid} {scene.get('type') or runtime} | {prefs.get('topic') or ''}",
+        )
+        scene_files.append(dest)
+        scene_runtimes.append({"scene_id": sid, "render_runtime": runtime, "waitUntil": True})
+
+    runtimes_used = {row["render_runtime"] for row in scene_runtimes}
+    compose_strategy = "scene_assemble" if len(runtimes_used) > 1 else "single_runtime"
+    selection["compose_strategy"] = compose_strategy
+    if "motion_canvas" in runtimes_used and selection.get("render_runtime") != "motion_canvas":
+        # Mixed film: lock stays; per-scene runtime is logged. Silent swap is CRITICAL.
+        pass
+    write_artifact(work_dir, "render_runtime_selection", selection)
+    write_artifact(work_dir, "scene_runtimes", {"version": "1.0", "scenes": scene_runtimes})
+
+    if review and not continue_after and not regen_id:
+        storyboard = {
+            "job_id": job.get("job_id"),
+            "status": "review",
+            "compose_strategy": compose_strategy,
+            "scenes": [],
+        }
+        for scene, runtime_row, mp4 in zip(scenes, scene_runtimes, scene_files):
+            frames = _preview_frames(mp4, posters_dir / str(scene.get("id")))
+            storyboard["scenes"].append(
+                {
+                    "id": scene.get("id"),
+                    "script_line": scene.get("description"),
+                    "duration": (scene.get("end_seconds") or 0) - (scene.get("start_seconds") or 0),
+                    "approved": False,
+                    "poster": frames[0] if frames else None,
+                    "preview": str(mp4),
+                    "poster_key": None,
+                    "preview_key": None,
+                    "render_runtime": runtime_row["render_runtime"],
+                }
+            )
+        write_artifact(work_dir, "storyboard", storyboard)
+        checkpoint.mark_human_approval(work_dir, "scene_review", False)
+        checkpoint.write_stage(work_dir, pipeline_name, "scene_review", "waiting")
+        return {
+            "status": "review",
+            "work_dir": str(work_dir),
+            "storyboard": storyboard,
+            "scene_runtimes": scene_runtimes,
+            "compose_strategy": compose_strategy,
+        }
+
+    if regen_id:
+        return {
+            "status": "review",
+            "work_dir": str(work_dir),
+            "regenerate_scene_id": regen_id,
+            "scene_runtimes": scene_runtimes,
+            "compose_strategy": compose_strategy,
+        }
+
+    renders = project_dir(work_dir) / "renders"
+    renders.mkdir(parents=True, exist_ok=True)
+    final_path = renders / "final.mp4"
+
+    composed = False
+    if not canned_mode and compose_strategy == "single_runtime":
+        result = tools_exec.execute(
+            "video_compose",
+            {
+                "operation": "compose",
+                "project_dir": str(project_dir(work_dir)),
+                "edit_decisions": edit,
+            },
+        )
+        composed = bool(result.success)
+        if result.success and result.artifacts:
+            src = Path(result.artifacts[0])
+            if src.is_file() and src != final_path:
+                shutil.copy(src, final_path)
+
+    if compose_strategy == "scene_assemble" or not composed or not final_path.is_file() or final_path.stat().st_size < 32:
+        if scene_files:
+            _stitch(scene_files, final_path)
+        else:
+            duration = int((job.get("prefs") or {}).get("duration_seconds") or 10)
+            _write_silent_mp4(final_path, duration)
+
+    frames = _preview_frames(final_path, posters_dir)
+    if _ffmpeg() and final_path.stat().st_size > 32:
+        gates.ffprobe_mp4(final_path)
+        gates.audio_levels(final_path)
+
+    write_artifact(
+        work_dir,
+        "render_report",
+        {
+            "version": "1.0",
+            "outputs": [
+                {
+                    "path": str(final_path),
+                    "format": "mp4",
+                    "codec": "h264",
+                    "audio_codec": "aac",
+                    "resolution": "1920x1080",
+                    "fps": 30,
+                    "duration_seconds": int((job.get("prefs") or {}).get("duration_seconds") or 10),
+                }
+            ],
+        },
+    )
+    checkpoint.write_stage(work_dir, pipeline_name, "compose")
+    checkpoint.write_stage(work_dir, pipeline_name, "publish")
+
+    r2_prefix = (job.get("r2") or {}).get("put_base")
+    if r2_prefix:
+        try:
+            r2.put_file(r2_prefix.rstrip("/") + "/final.mp4", final_path, "video/mp4")
+        except Exception as exc:
+            return {"status": "failed", "error": f"r2 put: {exc}"}
+
+    return {
+        "status": "done",
+        "work_dir": str(work_dir),
+        "final_mp4": str(final_path),
+        "posters": frames,
+        "render_runtime_selection": selection,
+        "scene_runtimes": scene_runtimes,
+        "compose_strategy": compose_strategy,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--job", required=True)
+    parser.add_argument("--work-dir", default="")
+    args = parser.parse_args(argv)
+    job_path = Path(args.job)
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    work = Path(args.work_dir) if args.work_dir else repo_root() / "work" / job["job_id"]
+    result = run_job(job, work_dir=work)
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") in {"done", "review"} else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+

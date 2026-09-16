@@ -1,0 +1,7 @@
+{
+  "job_id": "fixture-character-animation-auto",
+  "pipeline": "character-animation",
+  "review_mode": false,
+  "canned": true,
+  "prefs": {"topic": "Walking cycle", "duration_seconds": 10, "delivery_promise": "mixed"}
+}

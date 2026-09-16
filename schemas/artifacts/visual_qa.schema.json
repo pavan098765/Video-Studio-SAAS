@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kala-studio-engine/artifacts/visual_qa",
+  "title": "Visual QA",
+  "description": "Gemini-vision (or luminance) review of per-scene stills before the Kala filmstrip.",
+  "type": "object",
+  "required": ["version", "scenes"],
+  "additionalProperties": true,
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "rewrites": { "type": "integer", "minimum": 0 },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "qa_status"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "pass": { "type": "boolean" },
+          "severity": { "type": "string", "enum": ["critical", "warn", "ok"] },
+          "qa_status": { "type": "string", "enum": ["pass", "warn", "fail", "skipped"] },
+          "issues": { "type": "array", "items": { "type": "string" } },
+          "rewrite_hint": { "type": "string" },
+          "stills": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
